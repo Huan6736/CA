@@ -1,1 +1,581 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Câu Cá Vạn Vân - Modular Architecture Edition</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; }
+        body {
+            margin: 0; padding: 0;
+            background: #050b14;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh; overflow: hidden;
+        }
+        #game-wrapper {
+            position: relative;
+            width: 1000px; height: 600px;
+            border: 4px solid #38bdf8;
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8);
+            background: linear-gradient(to bottom, #1e3a8a, #0284c7, #0369a1);
+        }
+        canvas { display: block; }
+        
+        /* Module Giao Diện HUD */
+        .hud-container {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 15px; font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none; z-index: 3;
+        }
+        .hud-badge {
+            background: rgba(15, 23, 42, 0.85);
+            padding: 8px 16px; border-radius: 20px;
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            backdrop-filter: blur(4px);
+        }
 
+        /* Module Kỹ Năng / Chiêu Thức */
+        .skills-container {
+            position: absolute; bottom: 20px; left: 20px;
+            display: flex; gap: 10px; z-index: 3;
+        }
+        .skill-action-btn {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color: white; border: 2px solid #93c5fd; padding: 10px 16px;
+            font-size: 13px; font-weight: bold; border-radius: 12px; cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.1s;
+        }
+        .skill-action-btn:active { transform: scale(0.95); }
+        .skill-action-btn:disabled { background: #475569; border-color: #64748b; cursor: not-allowed; opacity: 0.6; }
+
+        /* Module Điều Hướng Game */
+        .controls-container {
+            position: absolute; bottom: 20px; right: 20px;
+            display: flex; gap: 10px; align-items: center; z-index: 3;
+        }
+        .btn-core-action {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #fff; border: none; padding: 14px 30px;
+            font-size: 18px; font-weight: bold; border-radius: 14px; cursor: pointer;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.4); border: 2px solid #fde68a;
+            transition: 0.1s;
+        }
+        .btn-core-action:active { transform: translateY(4px); }
+        .btn-core-action:disabled { background: #64748b; border-color: #94a3b8; cursor: not-allowed; }
+
+        .btn-sub-action {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: #fff; border: 2px solid #6ee7b7; padding: 14px 18px;
+            font-size: 15px; font-weight: bold; border-radius: 14px; cursor: pointer;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+        }
+
+        /* Module Hệ Thống Bảng Thông Báo / Modal */
+        .modal-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(8px);
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 10;
+        }
+        .modal-box {
+            background: #1e293b; border: 2px solid #38bdf8; border-radius: 16px;
+            padding: 25px; width: 560px; max-height: 82vh; overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+        }
+        .modal-row-item {
+            display: flex; justify-content: space-between; align-items: center;
+            background: #0f172a; margin-bottom: 10px; padding: 12px 18px;
+            border-radius: 10px; border: 1px solid #334155;
+        }
+        .modal-close-btn {
+            margin-top: 15px; background: #ef4444; border: none; padding: 8px 22px;
+            color: white; font-weight: bold; border-radius: 8px; cursor: pointer;
+        }
+
+        /* Thông báo trạng thái nhanh */
+        #game-floating-alert {
+            position: absolute; top: 32%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 32px; font-weight: 900; text-align: center;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.8);
+            pointer-events: none; opacity: 0; transition: opacity 0.3s ease;
+            z-index: 5;
+        }
+    </style>
+</head>
+<body>
+
+    <h2 style="margin: 0 0 10px 0; color: #38bdf8; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">🎣 CÂU CÁ VẠN VÂN - MODULAR ARCHITECTURE</h2>
+
+    <div id="game-wrapper">
+        <!-- MODULE 1: Giao diện HUD Trạng Thái -->
+        <div class="hud-container">
+            <div class="hud-badge">💰 Bạc: <span id="hud-money">300</span></div>
+            <div class="hud-badge">🎒 Cần: <span id="hud-rod">Cần Trúc Tập Sự</span></div>
+            <div class="hud-badge">📖 Sổ Tay: <span id="hud-dex">0</span>/7</div>
+            <div class="hud-badge">⚡ Điểm Năng Lượng: <span id="hud-energy">100</span></div>
+        </div>
+
+        <div id="game-floating-alert">Đang chuẩn bị câu...</div>
+
+        <!-- Canvas Đồ Họa Chính -->
+        <canvas id="gameCanvas" width="1000" height="600"></canvas>
+
+        <!-- MODULE 2: Bảng Điều Khiển Kỹ Năng / Chiêu Thức Chủ Động -->
+        <div class="skills-container">
+            <button class="skill-action-btn" id="btn-skill-freeze" onclick="SkillModule.activate('freeze')">❄️ Đóng Băng (10s)</button>
+            <button class="skill-action-btn" id="btn-skill-boost" onclick="SkillModule.activate('boost')">⚡ Siêu Kéo (15s)</button>
+            <button class="skill-action-btn" id="btn-skill-lucky" onclick="SkillModule.activate('lucky')">🍀 Cầu May (12s)</button>
+        </div>
+
+        <!-- MODULE 3: Bảng Tương Tác Hành Động & Menu -->
+        <div class="controls-container">
+            <button class="btn-sub-action" onclick="UIModule.toggleModal('shop', true)">🛒 Cửa Hàng Cần</button>
+            <button class="btn-sub-action" onclick="UIModule.toggleModal('dex', true)" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); border-color: #c4b5fd;">📖 Sổ Tay Thủy Quái</button>
+            <button class="btn-core-action" id="btn-main-action" onclick="GameCoreModule.executeMainAction()">THẢ CẦN</button>
+        </div>
+
+        <!-- Module Modal Cửa Hàng -->
+        <div id="modal-shop" class="modal-overlay">
+            <div class="modal-box">
+                <h3 style="margin-top:0; color:#38bdf8; text-align:center;">🛒 CỬA HÀNG CẦN CÂU VẠN VÂN</h3>
+                <div id="shop-items-list"></div>
+                <div style="text-align: center;"><button class="modal-close-btn" onclick="UIModule.toggleModal('shop', false)">Đóng Cửa Hàng</button></div>
+            </div>
+        </div>
+
+        <!-- Module Modal Sổ Tay Cá -->
+        <div id="modal-dex" class="modal-overlay">
+            <div class="modal-box">
+                <h3 style="margin-top:0; color:#c4b5fd; text-align:center;">📖 SỔ TAY THỦY QUẢI VẠN VÂN</h3>
+                <div id="dex-items-list"></div>
+                <div style="text-align: center;"><button class="modal-close-btn" onclick="UIModule.toggleModal('dex', false)">Đóng Sổ Tay</button></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    /* =========================================================================
+     * MODULE 1: DATABASE & CONFIG MODULE (Quản lý dữ liệu tĩnh & Cấu hình game)
+     * ========================================================================= */
+    const ConfigModule = {
+        rods: [
+            { id: 0, name: "Cần Trúc Tập Sự", price: 0, power: 1.0, luck: 1.0, color: "#a3704c" },
+            { id: 1, name: "Cần Nhựa Dẻo Dai", price: 400, power: 1.7, luck: 1.3, color: "#38bdf8" },
+            { id: 2, name: "Cần Sợi Carbon Vạn Vân", price: 1500, power: 2.8, luck: 1.8, color: "#a855f7" },
+            { id: 3, name: "Long Long Thần Cần", price: 5000, power: 4.8, luck: 2.6, color: "#f59e0b" },
+            { id: 4, name: "Hỗน Nguyên Thái Cực Cần", price: 15000, power: 9.0, luck: 4.2, color: "#ef4444" }
+        ],
+        fishes: [
+            { id: 0, name: "Cá Rô Phi Còm", price: 30, speed: 1.1, color: "#94a3b8", size: 18, rarity: "Thường", caught: false },
+            { id: 1, name: "Cá Trê Vàng Sông", price: 65, speed: 1.5, color: "#eab308", size: 25, rarity: "Thường", caught: false },
+            { id: 2, name: "Cá Chép Đỏ May Mắn", price: 160, speed: 2.1, color: "#ef4444", size: 33, rarity: "Hiếm", caught: false },
+            { id: 3, name: "Cá Mú Khổng Lồ", price: 400, speed: 2.6, color: "#3b82f6", size: 44, rarity: "Hiếm", caught: false },
+            { id: 4, name: "Cá Rồng Ngũ Sắc", price: 1100, speed: 3.3, color: "#10b981", size: 56, rarity: "Cực Hiếm", caught: false },
+            { id: 5, name: "Cá Voi Lưng Gù Mini", price: 2800, speed: 4.0, color: "#6366f1", size: 72, rarity: "Huyền Thoại", caught: false },
+            { id: 6, name: "Thủy Quái Cổ Đại Vạn Vân", price: 8000, speed: 5.0, color: "#ec4899", size: 92, rarity: "Thần Thoại", caught: false }
+        ]
+    };
+
+    /* =========================================================================
+     * MODULE 2: STATE MANAGEMENT MODULE (Quản lý trạng thái thực thể người chơi)
+     * ========================================================================= */
+    const StateModule = {
+        money: 350,
+        energy: 100,
+        currentRodIndex: 0,
+        gameState: 'IDLE', // 'IDLE', 'WAITING', 'HOOKED'
+        currentFish: null,
+        fishProgress: 50,
+        
+        addMoney(amount) {
+            this.money += amount;
+            UIModule.updateHUD();
+        },
+        subMoney(amount) {
+            this.money -= amount;
+            UIModule.updateHUD();
+        }
+    };
+
+    /* =========================================================================
+     * MODULE 3: SKILL & BUFF MODULE (Hệ thống kỹ năng và chiêu thức bổ trợ)
+     * ========================================================================= */
+    const SkillModule = {
+        skills: {
+            freeze: { active: false, duration: 0, cooldown: 0, maxDuration: 10, maxCd: 20 },
+            boost:  { active: false, duration: 0, cooldown: 0, maxDuration: 15, maxCd: 30 },
+            lucky:  { active: false, duration: 0, cooldown: 0, maxDuration: 12, maxCd: 25 }
+        },
+
+        activate(type) {
+            let skill = this.skills[type];
+            if (skill.cooldown > 0) return;
+
+            skill.active = true;
+            skill.duration = skill.maxDuration;
+            skill.cooldown = skill.maxCd;
+
+            if (type === 'freeze') UIModule.showAlert("❄️ Đóng Băng Kích Hoạt! Cá ngừng quẫy!", "#38bdf8");
+            if (type === 'boost') UIModule.showAlert("⚡ Siêu Kéo Kích Hoạt! Lực kéo nhân đôi!", "#f59e0b");
+            if (type === 'lucky') UIModule.showAlert("🍀 Cầu May Kích Hoạt! Tăng tỷ lệ gặp cá hiếm!", "#10b981");
+        },
+
+        update(dt) {
+            for (let key in this.skills) {
+                let s = this.skills[key];
+                if (s.active) {
+                    s.duration -= dt;
+                    if (s.duration <= 0) s.active = false;
+                }
+                if (s.cooldown > 0) s.cooldown -= dt;
+            }
+            
+            // Cập nhật giao diện nút kỹ năng
+            document.getElementById('btn-skill-freeze').innerText = this.skills.freeze.cooldown > 0 ? `❄️ Đóng Băng (${Math.ceil(this.skills.freeze.cooldown)}s)` : "❄️ Đóng Băng (10s)";
+            document.getElementById('btn-skill-boost').innerText = this.skills.boost.cooldown > 0 ? `⚡ Siêu Kéo (${Math.ceil(this.skills.boost.cooldown)}s)` : "⚡ Siêu Kéo (15s)";
+            document.getElementById('btn-skill-lucky').innerText = this.skills.lucky.cooldown > 0 ? `🍀 Cầu May (${Math.ceil(this.skills.lucky.cooldown)}s)` : "🍀 Cầu May (12s)";
+        }
+    };
+
+    /* =========================================================================
+     * MODULE 4: GRAPHICS & RENDER MODULE (Hệ thống đồ họa Canvas, Hoạt ảnh & Shakes)
+     * ========================================================================= */
+    const GraphicsModule = {
+        canvas: document.getElementById("gameCanvas"),
+        ctx: document.getElementById("gameCanvas").getContext("2d"),
+        shakeDuration: 0,
+        shakeIntensity: 0,
+        ambientFishes: [],
+        bubbles: [],
+
+        init() {
+            // Khởi tạo các đối tượng cá nền
+            for(let i=0; i<12; i++) {
+                this.ambientFishes.push({
+                    x: Math.random() * this.canvas.width,
+                    y: 240 + Math.random() * 330,
+                    vx: (Math.random() - 0.5) * 1.6,
+                    size: 14 + Math.random() * 20,
+                    color: ConfigModule.fishes[Math.floor(Math.random() * 4)].color
+                });
+            }
+            // Khởi tạo bọt khí
+            for(let i=0; i<20; i++) {
+                this.bubbles.push({
+                    x: Math.random() * this.canvas.width,
+                    y: 220 + Math.random() * 370,
+                    radius: 2 + Math.random() * 4,
+                    speed: 0.6 + Math.random() * 1.5
+                });
+            }
+        },
+
+        triggerShake(duration, intensity) {
+            this.shakeDuration = duration;
+            this.shakeIntensity = intensity;
+        },
+
+        render() {
+            let ctx = this.ctx;
+            ctx.save();
+
+            // Hiệu ứng Rung Lắc Màn Hình
+            if (this.shakeDuration > 0) {
+                this.shakeDuration--;
+                ctx.translate((Math.random() - 0.5) * this.shakeIntensity, (Math.random() - 0.5) * this.shakeIntensity);
+            }
+
+            ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+            // 1. Vẽ Bầu trời & Mây
+            let skyGrad = ctx.createLinearGradient(0, 0, 0, 220);
+            skyGrad.addColorStop(0, "#38bdf8");
+            skyGrad.addColorStop(1, "#bae6fd");
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, this.canvas.width, 220);
+
+            ctx.fillStyle = "rgba(255, 255, 255, 0.65)";
+            ctx.beginPath();
+            ctx.arc(150, 60, 28, 0, Math.PI * 2);
+            ctx.arc(185, 48, 38, 0, Math.PI * 2);
+            ctx.arc(220, 65, 24, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 2. Vẽ Vùng Nước Hồ Vạn Vân
+            let waterGrad = ctx.createLinearGradient(0, 220, 0, this.canvas.height);
+            waterGrad.addColorStop(0, "#0284c7");
+            waterGrad.addColorStop(0.5, "#0369a1");
+            waterGrad.addColorStop(1, "#050b14");
+            ctx.fillStyle = waterGrad;
+            ctx.fillRect(0, 220, this.canvas.width, this.canvas.height - 220);
+
+            // Sóng mặt nước
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, 220);
+            for(let x=0; x<this.canvas.width; x+=20) {
+                ctx.lineTo(x, 220 + Math.sin(Date.now()*0.005 + x*0.05) * 4);
+            }
+            ctx.stroke();
+
+            // 3. Cập nhật & Vẽ Bọt Khí
+            ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+            this.bubbles.forEach(b => {
+                b.y -= b.speed;
+                if (b.y < 230) b.y = this.canvas.height;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // 4. Cập nhật & Vẽ Cá Nền
+            this.ambientFishes.forEach(f => {
+                f.x += f.vx;
+                if (f.x < -60) f.x = this.canvas.width + 60;
+                if (f.x > this.canvas.width + 60) f.x = -60;
+
+                ctx.fillStyle = f.color;
+                ctx.beginPath();
+                ctx.ellipse(f.x, f.y, f.size, f.size/2.2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(f.x + (f.vx > 0 ? -f.size : f.size), f.y);
+                ctx.lineTo(f.x + (f.vx > 0 ? -f.size - 12 : f.size + 12), f.y - 8);
+                ctx.lineTo(f.x + (f.vx > 0 ? -f.size - 12 : f.size + 12), f.y + 8);
+                ctx.fill();
+            });
+
+            // 5. Vẽ Nhân vật & Cần Câu
+            ctx.fillStyle = "#334155";
+            ctx.fillRect(170, 195, 60, 25);
+            ctx.fillStyle = "#f43f5e";
+            ctx.beginPath();
+            ctx.arc(200, 172, 17, 0, Math.PI * 2);
+            ctx.fill();
+
+            let activeRod = ConfigModule.rods[StateModule.currentRodIndex];
+            ctx.strokeStyle = activeRod.color;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(210, 168);
+            let bend = StateModule.gameState === 'HOOKED' ? 40 : 10;
+            ctx.quadraticCurveTo(280, 115 - bend, 380, 220 + bend);
+            ctx.stroke();
+
+            // Dây câu
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(380, 220 + bend);
+            let hookY = StateModule.gameState === 'HOOKED' ? 390 + Math.sin(Date.now()*0.02)*15 : (StateModule.gameState === 'WAITING' ? 370 : 220);
+            ctx.lineTo(380, hookY);
+            ctx.stroke();
+
+            // 6. Vẽ Thanh Giằng Co khi cá cắn câu
+            if (StateModule.gameState === 'HOOKED' && StateModule.currentFish) {
+                ctx.fillStyle = StateModule.currentFish.color;
+                ctx.beginPath();
+                ctx.ellipse(380 + (Math.random()*8-4), hookY, StateModule.currentFish.size, StateModule.currentFish.size/2, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+                ctx.fillRect(320, 80, 360, 26);
+                ctx.strokeStyle = "#38bdf8";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(320, 80, 360, 26);
+
+                let barColor = StateModule.fishProgress > 30 ? "#10b981" : "#ef4444";
+                ctx.fillStyle = barColor;
+                ctx.fillRect(322, 82, (StateModule.fishProgress / 100) * 356, 22);
+
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 13px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText(`LỰC KÉO: ${Math.round(StateModule.fishProgress)}% [${StateModule.currentFish.name}]`, 500, 97);
+            }
+
+            ctx.restore();
+        }
+    };
+
+    /* =========================================================================
+     * MODULE 5: GAME CORE & UI MODULE (Điều phối vòng lặp, Xử lý sự kiện & Giao diện)
+     * ========================================================================= */
+    const UIModule = {
+        updateHUD() {
+            document.getElementById("hud-money").innerText = StateModule.money;
+            document.getElementById("hud-rod").innerText = ConfigModule.rods[StateModule.currentRodIndex].name;
+            document.getElementById("hud-energy").innerText = StateModule.energy;
+            let caughtCount = ConfigModule.fishes.filter(f => f.caught).length;
+            document.getElementById("hud-dex").innerText = caughtCount;
+        },
+
+        showAlert(text, color="#f8fafc") {
+            const box = document.getElementById("game-floating-alert");
+            box.innerText = text;
+            box.style.color = color;
+            box.style.opacity = 1;
+            setTimeout(() => { box.style.opacity = 0; }, 1800);
+        },
+
+        toggleModal(type, show) {
+            document.getElementById("modal-" + type).style.display = show ? "flex" : "none";
+            if (show && type === 'shop') this.renderShop();
+            if (show && type === 'dex') this.renderDex();
+        },
+
+        renderShop() {
+            const list = document.getElementById("shop-items-list");
+            list.innerHTML = "";
+            ConfigModule.rods.forEach((rod, index) => {
+                let isOwned = index <= StateModule.currentRodIndex;
+                list.innerHTML += `
+                    <div class="modal-row-item">
+                        <div>
+                            <strong style="color: ${rod.color}">${rod.name}</strong><br>
+                            <small>Sức kéo: x${rod.power} | May mắn: x${rod.luck}</small>
+                        </div>
+                        <div>
+                            ${isOwned ? '<span style="color: #10b981; font-weight:bold;">Đang sở hữu</span>' : 
+                            `<button onclick="GameCoreModule.buyRod(${index})" style="background:#3b82f6; border:none; padding:6px 14px; color:white; border-radius:6px; cursor:pointer;">Mua (${rod.price} Bạc)</button>`}
+                        </div>
+                    </div>
+                `;
+            });
+        },
+
+        renderDex() {
+            const list = document.getElementById("dex-items-list");
+            list.innerHTML = "";
+            ConfigModule.fishes.forEach(f => {
+                list.innerHTML += `
+                    <div class="modal-row-item">
+                        <div>
+                            <strong style="color: ${f.color}">${f.name}</strong> [${f.rarity}]<br>
+                            <small>Giá trị: ${f.price} Bạc | Kích thước: ${f.size}cm</small>
+                        </div>
+                        <div>
+                            ${f.caught ? '<span style="color: #10b981; font-weight:bold;">✔ Đã bắt</span>' : '<span style="color: #64748b;">🔒 Chưa bắt</span>'}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+    };
+
+    const GameCoreModule = {
+        init() {
+            GraphicsModule.init();
+            UIModule.updateHUD();
+            this.startLoop();
+        },
+
+        executeMainAction() {
+            const btn = document.getElementById("btn-main-action");
+            if (StateModule.gameState === 'IDLE') {
+                StateModule.gameState = 'WAITING';
+                btn.innerText = "ĐANG CHỜ...";
+                btn.disabled = true;
+                UIModule.showAlert("Đã thả mồi xuống hồ Vạn Vân...", "#38bdf8");
+
+                let waitTime = 1000 + Math.random() * 2000;
+                setTimeout(() => {
+                    if (StateModule.gameState === 'WAITING') {
+                        StateModule.gameState = 'HOOKED';
+                        GraphicsModule.triggerShake(28, 10);
+                        
+                        let luckBonus = SkillModule.skills.lucky.active ? 2.0 : 1.0;
+                        let maxTier = Math.min(StateModule.currentRodIndex + 2, ConfigModule.fishes.length);
+                        let weightedList = [];
+                        for(let i=0; i<maxTier; i++) {
+                            let weight = Math.max(1, (maxTier - i) * ConfigModule.rods[StateModule.currentRodIndex].luck * luckBonus);
+                            for(let w=0; w<weight; w++) weightedList.push(ConfigModule.fishes[i]);
+                        }
+                        StateModule.currentFish = weightedList[Math.floor(Math.random() * weightedList.length)];
+
+                        StateModule.fishProgress = 45;
+                        btn.innerText = "KÉO LÊN! (NHẤP)";
+                        btn.disabled = false;
+                        UIModule.showAlert(`⚠️ CÓ CÁ CẮN CÂU! [${StateModule.currentFish.name}]`, "#f59e0b");
+                    }
+                }, waitTime);
+
+            } else if (StateModule.gameState === 'HOOKED') {
+                let powerMultiplier = SkillModule.skills.boost.active ? 2.5 : 1.0;
+                StateModule.fishProgress += 11 * ConfigModule.rods[StateModule.currentRodIndex].power * powerMultiplier;
+                GraphicsModule.triggerShake(4, 3);
+
+                if (StateModule.fishProgress >= 100) {
+                    StateModule.money += StateModule.currentFish.price;
+                    StateModule.currentFish.caught = true;
+                    UIModule.updateHUD();
+                    UIModule.showAlert(`🎉 Câu thành công ${StateModule.currentFish.name}! (+${StateModule.currentFish.price} Bạc)`, "#10b981");
+                    this.resetGame();
+                }
+            }
+        },
+
+        resetGame() {
+            StateModule.gameState = 'IDLE';
+            const btn = document.getElementById("btn-main-action");
+            btn.innerText = "THẢ CẦN";
+            btn.disabled = false;
+            StateModule.currentFish = null;
+            StateModule.fishProgress = 50;
+        },
+
+        buyRod(index) {
+            let rod = ConfigModule.rods[index];
+            if (StateModule.money >= rod.price) {
+                StateModule.money -= rod.price;
+                StateModule.currentRodIndex = index;
+                UIModule.updateHUD();
+                UIModule.showAlert(`🎊 Đã sở hữu ${rod.name}!`, "#10b981");
+                UIModule.renderShop();
+            } else {
+                UIModule.showAlert("❌ Không đủ Bạc để mua cần này!", "#ef4444");
+            }
+        },
+
+        startLoop() {
+            let lastTime = performance.now();
+            const loop = (currentTime) => {
+                let dt = (currentTime - lastTime) / 1000;
+                lastTime = currentTime;
+
+                // Cập nhật logic phụ trợ
+                SkillModule.update(dt);
+
+                if (StateModule.gameState === 'HOOKED' && StateModule.currentFish) {
+                    let pullBack = StateModule.currentFish.speed * 0.42;
+                    if (SkillModule.skills.freeze.active) pullBack = 0;
+                    StateModule.fishProgress -= pullBack;
+
+                    if (StateModule.fishProgress <= 0) {
+                        UIModule.showAlert("💨 Cá quẫy mạnh quá, sổng mất rồi!", "#ef4444");
+                        this.resetGame();
+                    }
+                }
+
+                // Render đồ họa
+                GraphicsModule.render();
+                requestAnimationFrame(loop);
+            };
+            requestAnimationFrame(loop);
+        }
+    };
+
+    // Khởi động toàn bộ trò chơi khi tải xong
+    window.onload = () => {
+        GameCoreModule.init();
+    };
+</script>
+
+</body>
+</html>
